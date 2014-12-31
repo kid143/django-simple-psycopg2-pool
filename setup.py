@@ -11,7 +11,7 @@ setup(
     name='django-simple-psycopg2-pool',
     version='1.0.0',
     packages=['psycopg2_simple_pool'],
-    url='http://182.92.227.154/kid143/django-simple-psycopg2-pool',
+    url='https://github.com/kid143/django-simple-psycopg2-pool',
     license='MIT',
     author='kid143',
     author_email='h@anrenmind.com',
