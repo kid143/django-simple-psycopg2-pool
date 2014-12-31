@@ -10,5 +10,5 @@ setup(
     license='MIT',
     author='kid143',
     author_email='h@anrenmind.com',
-    description='A simple psycopg2 pool for Django'
+    description='A simple psycopg2 connection pool for Django'
 )
