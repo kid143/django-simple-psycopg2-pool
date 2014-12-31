@@ -1,6 +1,6 @@
 # django-simple-psycopg2-pool
 
-This is a [psycopg2]() based pool for Django's  ORM.
+This is a [psycopg2](https://github.com/psycopg/psycopg2) based pool for Django's  ORM.
 The code is tested under Django 1.7 but should work with
 Django 1.6.
 
