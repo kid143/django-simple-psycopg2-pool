@@ -18,7 +18,8 @@ POOL_SETTING_KEY = 'DATABASE_POOL_ARGS'
 DEFAULT_POOL_SETTING = {
     'MIN_CONN': 5,
     'MAX_CONN': 10,
-    'POOL_TYPE': 'threading'
+    'POOL_TYPE': 'threading',
+    'ASYNC': False
 }
 
 _pools = {}
@@ -56,6 +57,31 @@ def _create_pool(setting_key=POOL_SETTING_KEY, *args, **kwargs):
             'database operation, currently only `threading` and `gevent` '
             'types are available')
 
+    if 'ASYNC' in pool_setting and pool_setting['ASYNC']:
+        if pool_setting['POOL_TYPE'] == 'threading':
+            import select
+            from psycopg2 import extensions
+
+            # add callback
+
+            def wait_select(conn):
+                import psycopg2
+                while 1:
+                    state = conn.poll()
+                    if state == extensions.POLL_OK:
+                        break
+                    elif state == extensions.POLL_READ:
+                        select.select([conn.fileno()], [], [])
+                    elif state == extensions.POLL_WRITE:
+                        select.select([], [conn.fileno()], [])
+                    else:
+                        raise psycopg2.OperationalError("bad state from poll: %s" % state)
+
+            extensions.set_wait_callback(wait_select)
+        elif pool_setting['POOL_TYPE'] == 'gevent':
+            import psycogreen.gevent
+            psycogreen.gevent.patch_psycopg()
+
     return pool_class(pool_setting['MIN_CONN'],
                       pool_setting['MAX_CONN'],
                       *args,
@@ -66,10 +92,11 @@ def ensure_lock(setting_key=POOL_SETTING_KEY):
     global _pools_lock
     if not _pools_lock:
         class DummyLock(object):
-                    def acquire(self):
-                        pass
-                    def release(self):
-                        pass
+            def acquire(self):
+                pass
+
+            def release(self):
+                pass
 
         if hasattr(settings, setting_key):
             customized_setting = getattr(settings, setting_key)
