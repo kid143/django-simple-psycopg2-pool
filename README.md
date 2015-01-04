@@ -27,9 +27,17 @@ The pooling args can be configured in Django project's `setting.py`:
 ```python
 DATABASE_POOL_ARGS = {
     'MIN_CONN': 5,
-    'MAX_CONN': 10
+    'MAX_CONN': 10,
+    'POOL_TYPE': 'threading'
 }
 ```
+
+Currently pool type only support `threading` and `gevent`, 
+the latter option requires gevent library.
+
+## TODO
+
+Asynchronous database connection support to be added.
 
 ## License
 
