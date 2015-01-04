@@ -9,7 +9,7 @@ required = [
 
 setup(
     name='django-simple-psycopg2-pool',
-    version='1.1.1',
+    version='1.2.0',
     packages=['psycopg2_simple_pool'],
     url='https://github.com/kid143/django-simple-psycopg2-pool',
     license='MIT',
