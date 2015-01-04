@@ -5,8 +5,6 @@ from __future__ import unicode_literals
 __author__ = 'huang'
 
 
-from threading import Semaphore
-from psycopg2 import pool
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db.backends.postgresql_psycopg2.base import DatabaseWrapper as Psycopg2DatabaseWrapper
@@ -19,31 +17,75 @@ POOL_SETTING_KEY = 'DATABASE_POOL_ARGS'
 
 DEFAULT_POOL_SETTING = {
     'MIN_CONN': 5,
-    'MAX_CONN': 10
+    'MAX_CONN': 10,
+    'POOL_TYPE': 'threading'
 }
 
 _pools = {}
-_pools_lock = Semaphore(value=1)
+_pools_lock = None
 
 
 def _create_pool(setting_key=POOL_SETTING_KEY, *args, **kwargs):
     pool_setting = DEFAULT_POOL_SETTING
     if hasattr(settings, setting_key):
         customized_setting = getattr(settings, setting_key)
-        if isinstance(customized_setting, dict) and (
+        if not isinstance(customized_setting, dict) and not (
             'MIN_CONN' in customized_setting or
             'MAX_CONN' in customized_setting
         ):
-            pool_setting.update(customized_setting)
-        else:
             raise ImproperlyConfigured(
                 'The setting requires a dict named `{0}` with values '
-                'for keys named `MIN_CONN` and `MAX_CONN`!')
+                'for keys named `MIN_CONN`, `MAX_CONN`, `ASYNC` AND `POOL_TYPE`!')
 
-    return pool.ThreadedConnectionPool(pool_setting['MIN_CONN'],
-                                       pool_setting['MAX_CONN'],
-                                       *args,
-                                       **kwargs)
+        if not 'POOL_TYPE' in customized_setting or not (
+            customized_setting['POOL_TYPE'] in ('threading', 'gevent')
+        ):
+            raise ImproperlyConfigured(
+                '`POOL_TYPE` currently only support `threading` and gevent!')
+        pool_setting.update(customized_setting)
+
+    if pool_setting['POOL_TYPE'] == 'threading':
+        from .pool import ThreadedConnectionPool
+        pool_class = ThreadedConnectionPool
+    elif pool_setting['POOL_TYPE'] == 'gevent':
+        from .pool import GeventConnectionPool
+        pool_class = GeventConnectionPool
+    else:
+        raise ImproperlyConfigured(
+            'The setting requires a valid asynchrounous type for asynchrounous'
+            'database operation, currently only `threading` and `gevent` '
+            'types are available')
+
+    return pool_class(pool_setting['MIN_CONN'],
+                      pool_setting['MAX_CONN'],
+                      *args,
+                      **kwargs)
+
+
+def ensure_lock(setting_key=POOL_SETTING_KEY):
+    global _pools_lock
+    if not _pools_lock:
+        class DummyLock(object):
+                    def acquire(self):
+                        pass
+                    def release(self):
+                        pass
+
+        if hasattr(settings, setting_key):
+            customized_setting = getattr(settings, setting_key)
+            if customized_setting['POOL_TYPE'] == 'threading':
+                import threading
+                _pools_lock = threading.Lock()
+            elif customized_setting['POOL_TYPE'] == 'gevent':
+                import gevent.lock
+                _pools_lock = gevent.lock.RLock()
+            else:
+                raise ImproperlyConfigured(
+                    'The setting requires a valid asynchrounous type for asynchrounous'
+                    'database operation, currently only `threading` and `gevent` '
+                    'types are available')
+        else:
+            _pools_lock = DummyLock()
 
 
 class DatabaseWrapper(Psycopg2DatabaseWrapper):
@@ -61,6 +103,7 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
             return self._pool
         global _pools_lock
         global _pools
+        ensure_lock()
         _pools_lock.acquire()
         if not self.alias in _pools:
             self._pool = _create_pool(**self.get_connection_params())
