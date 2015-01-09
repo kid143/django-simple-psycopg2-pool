@@ -5,6 +5,8 @@ from __future__ import unicode_literals
 __author__ = 'huang'
 
 
+import logging
+import django
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db.backends.postgresql_psycopg2.base import DatabaseWrapper as Psycopg2DatabaseWrapper
@@ -24,6 +26,8 @@ DEFAULT_POOL_SETTING = {
 
 _pools = {}
 _pools_lock = None
+
+logger = logging.getLogger('PoolDatabaseWrapper')
 
 
 def _create_pool(setting_key=POOL_SETTING_KEY, *args, **kwargs):
@@ -115,12 +119,12 @@ def ensure_lock(setting_key=POOL_SETTING_KEY):
             _pools_lock = DummyLock()
 
 
-class DatabaseWrapper(Psycopg2DatabaseWrapper):
+class Django16Mixin(Psycopg2DatabaseWrapper):
     """ A database wrapper for pooling psycopg2 connections. """
 
     def __init__(self, *args, **kwargs):
         self._pool = None
-        super(DatabaseWrapper, self).__init__(*args, **kwargs)
+        super(Django16Mixin, self).__init__(*args, **kwargs)
         from .creation import DatabaseCreation
         self.creation = DatabaseCreation(self)
 
@@ -133,9 +137,11 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
         ensure_lock()
         _pools_lock.acquire()
         if not self.alias in _pools:
+            logger.info("Initiating pool.")
             self._pool = _create_pool(**self.get_connection_params())
             _pools[self.alias] = self._pool
         else:
+            logger.info("Getting existed pool.")
             self._pool = _pools[self.alias]
         _pools_lock.release()
         return self._pool
@@ -158,7 +164,19 @@ class DatabaseWrapper(Psycopg2DatabaseWrapper):
             with self.wrap_database_errors:
                 self._pool.putconn(self.connection)
 
+
+class Django17Mixin(object):
+    """ Django 1.7 support """
     def set_clean(self):
         if self.in_atomic_block:
             self.closed_in_transaction = True
             self.needs_rollback = True
+
+if django.VERSION >= (1, 7):
+    class DatabaseWrapper(Django16Mixin, Django17Mixin):
+        pass
+elif django.VERSION >= (1, 6):
+    class DatabaseWrapper(Django16Mixin):
+        pass
+else:
+    raise ImproperlyConfigured("This pool requires Django 1.6+!")

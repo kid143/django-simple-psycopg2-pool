@@ -1,8 +1,8 @@
 # django-simple-psycopg2-pool
 
 This is a [psycopg2](https://github.com/psycopg/psycopg2) based pool for Django's  ORM.
-The code is tested under Django 1.7 but should work with
-Django 1.6.
+The code is tested under Django 1.6 and 1.7. 
+Django 1.5 and below is not supported.
 
 This pool uses psycopg2's native ThreadPool for pooling.
 
